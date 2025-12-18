@@ -13,7 +13,7 @@ const clearButton = document.getElementById("clear-button");
 const langSwitch = document.getElementById("lang-switch");
 const titleText = document.getElementById("title-text");
 const taglineText = document.getElementById("tagline-text");
-const messagePlaceholder = document.getElementById("message-placeholder");
+// Note: placeholder will be set on the textarea (#user-input) directly
 
 // Language support
 const LOCALES = ["ja", "zh", "en"];
@@ -61,10 +61,15 @@ const STRINGS = {
 
 // Helper functions for language support
 function getBrowserLocale() {
-  const browserLang = navigator.language || navigator.userLanguage;
+  try {
+    const saved = localStorage.getItem("locale");
+    if (saved && LOCALES.includes(saved)) return saved;
+  } catch {}
+  const browserLang = navigator.language || navigator.userLanguage || "en";
   if (browserLang.startsWith("ja")) return "ja";
   if (browserLang.startsWith("zh")) return "zh";
-  return "en"; // Default to English
+  if (browserLang.startsWith("en")) return "en";
+  return FALLBACK_LOCALE;
 }
 
 function updateUIForLocale(locale) {
@@ -81,9 +86,12 @@ function updateUIForLocale(locale) {
     clearButton.textContent = strings.clear;
     clearButton.title = strings.clearTitle;
   }
-  if (sendButton) sendButton.textContent = strings.send;
   if (typingIndicator) typingIndicator.textContent = strings.thinking;
-  if (messagePlaceholder) messagePlaceholder.placeholder = strings.placeholder;
+  if (userInput) userInput.placeholder = strings.placeholder;
+  if (sendButton) {
+    sendButton.title = strings.send;
+    sendButton.setAttribute("aria-label", strings.send);
+  }
 
   // Update active language button
   document.querySelectorAll(".lang-btn").forEach((btn) => {
@@ -136,6 +144,7 @@ if (langSwitch) {
     const newLocale = button.dataset.locale;
     if (newLocale && newLocale !== currentLocale && LOCALES.includes(newLocale)) {
       currentLocale = newLocale;
+      try { localStorage.setItem("locale", currentLocale); } catch {}
       updateUIForLocale(currentLocale);
     }
   });
@@ -186,9 +195,11 @@ async function sendMessage() {
 
   userInput.value = "";
 
-  // Show typing indicator
+  // Show typing indicator and disable input
   typingIndicator.classList.add("visible");
   isProcessing = true;
+  userInput.disabled = true;
+  sendButton.disabled = true;
 
   try {
     const response = await fetch("/api/chat", {
@@ -206,39 +217,56 @@ async function sendMessage() {
       throw new Error("Network response was not ok");
     }
 
-    // Handle streaming response
+    // Handle SSE streaming response
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let assistantMessage = "";
+    let buffer = "";
+    let responseText = "";
 
-    // Clear typing indicator
-    typingIndicator.classList.remove("visible");
-
-    // Add empty assistant message
+    // Prepare assistant message container
     const messageElement = addMessageToChat("assistant", "");
-
-    // Read the stream
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      assistantMessage += chunk;
-
-      // Update the message in real-time
-      const contentElement = messageElement.querySelector(".bubble p");
+    const flush = () => {
+      const contentElement = messageElement?.querySelector(".bubble p");
       if (contentElement) {
-        contentElement.textContent = assistantMessage;
-        // Auto-scroll to bottom
+        contentElement.textContent = responseText;
         contentElement.scrollIntoView({ behavior: "smooth" });
+      }
+    };
+
+    let done = false;
+    while (!done) {
+      const { value, done: readerDone } = await reader.read();
+      if (readerDone) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parsed = consumeSseEvents(buffer);
+      buffer = parsed.buffer;
+      for (const data of parsed.events) {
+        if (data === "[DONE]") { done = true; break; }
+        try {
+          const json = JSON.parse(data);
+          let content = "";
+          if (typeof json.response === "string" && json.response.length > 0) {
+            content = json.response;
+          } else if (json.choices?.[0]?.delta?.content) {
+            content = json.choices[0].delta.content;
+          }
+          if (content) {
+            responseText += content;
+            flush();
+          }
+        } catch (e) {
+          console.error("SSE JSON parse error:", e, data);
+        }
       }
     }
 
-    // Add to chat history
-    chatHistory.push({
-      role: "assistant",
-      content: assistantMessage,
-    });
+    // finalize
+    if (responseText.length > 0) {
+      chatHistory.push({ role: "assistant", content: responseText });
+      if (chatHistory.length > MAX_LOCAL_HISTORY) {
+        chatHistory = chatHistory.slice(-MAX_LOCAL_HISTORY);
+      }
+    }
   } catch (error) {
     console.error("Error:", error);
     typingIndicator.classList.remove("visible");
@@ -247,8 +275,46 @@ async function sendMessage() {
       STRINGS[currentLocale]?.error || "Sorry, something went wrong."
     );
   } finally {
+    // Hide typing indicator and re-enable input
+    typingIndicator.classList.remove("visible");
     isProcessing = false;
+    userInput.disabled = false;
+    sendButton.disabled = false;
+    userInput.focus();
   }
+}
+
+/**
+ * Render a chat message bubble
+ */
+function addMessageToChat(role, content) {
+  const container = document.getElementById("chat-messages");
+  if (!container) return null;
+
+  const messageEl = document.createElement("div");
+  messageEl.className = `message ${role}-message`;
+
+  if (role === "assistant") {
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+    avatar.innerHTML = '<img src="/img/AI聊天使用头像.png" alt="Hiyori" onerror="this.style.display=\'none\'" />';
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = `<p>${content}</p>`;
+
+    messageEl.appendChild(avatar);
+    messageEl.appendChild(bubble);
+  } else {
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.innerHTML = `<p>${content}</p>`;
+    messageEl.appendChild(bubble);
+  }
+
+  container.appendChild(messageEl);
+  container.scrollTop = container.scrollHeight;
+  return messageEl;
 }
 
 function consumeSseEvents(buffer) {
