@@ -249,117 +249,29 @@ async function sendMessage() {
   } finally {
     isProcessing = false;
   }
-					} catch (e) {
-						console.error("Error parsing SSE data as JSON:", e, data);
-					}
-				}
-				break;
-			}
-
-			// Decode chunk
-			buffer += decoder.decode(value, { stream: true });
-			const parsed = consumeSseEvents(buffer);
-			buffer = parsed.buffer;
-			for (const data of parsed.events) {
-				if (data === "[DONE]") {
-					sawDone = true;
-					buffer = "";
-					break;
-				}
-				try {
-					const jsonData = JSON.parse(data);
-					// Handle both Workers AI format (response) and OpenAI format (choices[0].delta.content)
-					let content = "";
-					if (
-						typeof jsonData.response === "string" &&
-						jsonData.response.length > 0
-					) {
-						content = jsonData.response;
-					} else if (jsonData.choices?.[0]?.delta?.content) {
-						content = jsonData.choices[0].delta.content;
-					}
-					if (content) {
-						responseText += content;
-						flushAssistantText();
-					}
-				} catch (e) {
-					console.error("Error parsing SSE data as JSON:", e, data);
-				}
-			}
-			if (sawDone) {
-				break;
-			}
-		}
-
-		// Add completed response to chat history (trim window)
-		if (responseText.length > 0) {
-			chatHistory.push({ role: "assistant", content: responseText });
-			if (chatHistory.length > MAX_LOCAL_HISTORY) {
-				chatHistory = chatHistory.slice(-MAX_LOCAL_HISTORY);
-			}
-		}
-	} catch (error) {
-		console.error("Error:", error);
-		addMessageToChat(
-			"assistant",
-			"Sorry, there was an error processing your request.",
-		);
-	} finally {
-		// Hide typing indicator
-		typingIndicator.classList.remove("visible");
-
-		// Re-enable input
-		isProcessing = false;
-		userInput.disabled = false;
-		sendButton.disabled = false;
-		userInput.focus();
-	}
-}
-
-/**
- * Helper function to add message to chat
- */
-function addMessageToChat(role, content) {
-	const messageEl = document.createElement("div");
-	messageEl.className = `message ${role}-message`;
-
-	if (role === "assistant") {
-		const avatar = document.createElement("div");
-		avatar.className = "avatar";
-		avatar.innerHTML = '<img src="/img/Q版.png" alt="Hiyori" onerror="this.style.display=\'none\'" />';
-		const bubble = document.createElement("div");
-		bubble.className = "bubble";
-		bubble.innerHTML = `<p>${content}</p>`;
-		messageEl.appendChild(avatar);
-		messageEl.appendChild(bubble);
-	} else {
-		const bubble = document.createElement("div");
-		bubble.className = "bubble";
-		bubble.innerHTML = `<p>${content}</p>`;
-		messageEl.appendChild(bubble);
-	}
-
-	chatMessages.appendChild(messageEl);
-	chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function consumeSseEvents(buffer) {
-	let normalized = buffer.replace(/\r/g, "");
-	const events = [];
-	let eventEndIndex;
-	while ((eventEndIndex = normalized.indexOf("\n\n")) !== -1) {
-		const rawEvent = normalized.slice(0, eventEndIndex);
-		normalized = normalized.slice(eventEndIndex + 2);
+  let normalized = buffer.replace(/\r/g, "");
+  const events = [];
+  let eventEndIndex;
+  
+  while ((eventEndIndex = normalized.indexOf("\n\n")) !== -1) {
+    const rawEvent = normalized.slice(0, eventEndIndex);
+    normalized = normalized.slice(eventEndIndex + 2);
 
-		const lines = rawEvent.split("\n");
-		const dataLines = [];
-		for (const line of lines) {
-			if (line.startsWith("data:")) {
-				dataLines.push(line.slice("data:".length).trimStart());
-			}
-		}
-		if (dataLines.length === 0) continue;
-		events.push(dataLines.join("\n"));
-	}
-	return { events, buffer: normalized };
+    const lines = rawEvent.split("\n");
+    const dataLines = [];
+    
+    for (const line of lines) {
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trimStart());
+      }
+    }
+    
+    if (dataLines.length === 0) continue;
+    events.push(dataLines.join("\n"));
+  }
+  
+  return { events, buffer: normalized };
 }
