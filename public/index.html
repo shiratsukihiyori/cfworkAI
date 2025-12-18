@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN" id="html-lang">
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>白月日和 AI 陪伴聊天</title>
+		<title id="page-title">白月日和 AI 陪伴聊天</title>
 		<style>
 			:root {
 				--primary-color: #f6821f;
@@ -103,7 +103,26 @@
 				min-height: 44px;
 			}
 
-			#send-button {
+			.lang-btn {
+	background: #f8e1eb;
+	color: #a24b75;
+	border: 1px solid #f0c4d6;
+	border-radius: 6px;
+	padding: 4px 8px;
+	font-size: 12px;
+	cursor: pointer;
+	transition: all 0.2s;
+}
+
+.lang-btn:hover {
+	background: #f0c4d6;
+}
+
+.lang-btn[data-locale="ja"] {
+	font-weight: bold;
+}
+
+#send-button {
 				margin-left: 0.5rem;
 				padding: 0 1rem;
 				background-color: var(--primary-color);
@@ -158,8 +177,8 @@
 	<body>
 		<div class="shell">
 			<header>
-				<h1>白月日和 AI 陪伴聊天</h1>
-				<p style="color:#7e2957">やさしく、そばにいるよ。</p>
+				<h1 id="title-text">白月日和 AI 陪伴聊天</h1>
+				<p id="tagline-text" style="color:#7e2957">やさしく、そばにいるよ。</p>
 			</header>
 			<div class="toolbar">
 				<div style="display:flex;align-items:center;gap:10px;">
@@ -168,7 +187,14 @@
 					</div>
 					<span style="color:#a24b75;font-size:0.9rem;">白月 日和</span>
 				</div>
-				<button id="clear-button" class="clear-btn" title="清空对话">清空对话</button>
+				<div style="display:flex;align-items:center;gap:8px;">
+					<div id="lang-switch" style="display:flex;gap:4px;">
+						<button class="clear-btn lang-btn" data-locale="ja" title="日本語">日本語</button>
+						<button class="clear-btn lang-btn" data-locale="zh" title="中文">中文</button>
+						<button class="clear-btn lang-btn" data-locale="en" title="English">EN</button>
+					</div>
+					<button id="clear-button" class="clear-btn" title="清空对话">清空对话</button>
+				</div>
 			</div>
 			<div class="chat-container">
 			<div id="chat-messages" class="chat-messages">
@@ -189,11 +215,11 @@
 			<div class="message-input">
 				<textarea
 					id="user-input"
-					placeholder="想说点什么吗…"
+					placeholder="" id="message-placeholder"
 					rows="1"
 					autofocus
 				></textarea>
-				<button id="send-button">Send</button>
+				<button id="send-button">发送</button>
 			</div>
 			</div>
 		</div>

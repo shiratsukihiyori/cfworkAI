@@ -10,153 +10,245 @@ const userInput = document.getElementById("user-input");
 const sendButton = document.getElementById("send-button");
 const typingIndicator = document.getElementById("typing-indicator");
 const clearButton = document.getElementById("clear-button");
+const langSwitch = document.getElementById("lang-switch");
+const titleText = document.getElementById("title-text");
+const taglineText = document.getElementById("tagline-text");
+const messagePlaceholder = document.getElementById("message-placeholder");
+
+// Language support
+const LOCALES = ["ja", "zh", "en"];
+const FALLBACK_LOCALE = "ja";
+
+// Localized strings
+const STRINGS = {
+  ja: {
+    pageTitle: "白月日和 AI チャット",
+    title: "白月日和 AI チャット",
+    tagline: "やさしく、そばにいるよ。",
+    clear: "会話をリセット",
+    clearTitle: "会話をクリアします",
+    send: "送信",
+    placeholder: "メッセージを入力...",
+    thinking: "考え中...",
+    initialMessage: "こんにちは。白月日和だよ。今日も、ゆっくり話そうね。",
+    error: "ごめんね、少し調子がよくないみたい。もう一度試してみてくれる？",
+  },
+  zh: {
+    pageTitle: "白月日和 AI 陪伴聊天",
+    title: "白月日和 AI 陪伴聊天",
+    tagline: "温柔地，在你身边。",
+    clear: "清空对话",
+    clearTitle: "清空当前对话",
+    send: "发送",
+    placeholder: "输入消息...",
+    thinking: "思考中...",
+    initialMessage: "你好呀，我是白月日和。今天也请多指教呢。",
+    error: "抱歉，刚刚遇到一点小状况，可以再试一次吗？",
+  },
+  en: {
+    pageTitle: "Hiyori AI Chat",
+    title: "Hiyori AI Chat",
+    tagline: "Gently by your side.",
+    clear: "Clear Chat",
+    clearTitle: "Clear current conversation",
+    send: "Send",
+    placeholder: "Type a message...",
+    thinking: "Thinking...",
+    initialMessage: "Hello, I'm Hiyori. Let's have a nice chat today.",
+    error: "I'm sorry, something felt off. Could we try once more?",
+  },
+};
+
+// Helper functions for language support
+function getBrowserLocale() {
+  const browserLang = navigator.language || navigator.userLanguage;
+  if (browserLang.startsWith("ja")) return "ja";
+  if (browserLang.startsWith("zh")) return "zh";
+  return "en"; // Default to English
+}
+
+function updateUIForLocale(locale) {
+  const strings = STRINGS[locale] || STRINGS[FALLBACK_LOCALE];
+
+  // Update document language and title
+  document.documentElement.lang = locale;
+  document.title = strings.pageTitle;
+
+  // Update UI elements if they exist
+  if (titleText) titleText.textContent = strings.title;
+  if (taglineText) taglineText.textContent = strings.tagline;
+  if (clearButton) {
+    clearButton.textContent = strings.clear;
+    clearButton.title = strings.clearTitle;
+  }
+  if (sendButton) sendButton.textContent = strings.send;
+  if (typingIndicator) typingIndicator.textContent = strings.thinking;
+  if (messagePlaceholder) messagePlaceholder.placeholder = strings.placeholder;
+
+  // Update active language button
+  document.querySelectorAll(".lang-btn").forEach((btn) => {
+    if (btn.dataset.locale === locale) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
+    }
+  });
+
+  // Update chat history if it's the initial message
+  if (chatHistory.length === 0) {
+    addInitialMessage();
+  }
+}
+
+function addInitialMessage() {
+  const strings = STRINGS[currentLocale] || STRINGS[FALLBACK_LOCALE];
+  const initialMessage = {
+    role: "assistant",
+    content: strings.initialMessage,
+  };
+  chatHistory = [initialMessage];
+
+  // Clear and re-render messages
+  const chatMessages = document.getElementById("chat-messages");
+  if (chatMessages) {
+    chatMessages.innerHTML = "";
+    addMessageToChat("assistant", strings.initialMessage);
+  }
+}
 
 // Chat state
 const MAX_LOCAL_HISTORY = 16;
 
-let chatHistory = [
-	{
-		role: "assistant",
-		content: "こんにちは。白月日和だよ。今日も、ゆっくり話そうね。",
-	},
-];
+// Initialize with default language
+let currentLocale = getBrowserLocale();
+let chatHistory = [];
 let isProcessing = false;
+
+// Initialize language
+updateUIForLocale(currentLocale);
+
+// Language switch handler
+if (langSwitch) {
+  langSwitch.addEventListener("click", (e) => {
+    const button = e.target.closest(".lang-btn");
+    if (!button) return;
+
+    const newLocale = button.dataset.locale;
+    if (newLocale && newLocale !== currentLocale && LOCALES.includes(newLocale)) {
+      currentLocale = newLocale;
+      updateUIForLocale(currentLocale);
+    }
+  });
+}
+
+// Clear chat handler
+if (clearButton) {
+  clearButton.addEventListener("click", () => {
+    chatHistory = [];
+    const chatMessages = document.getElementById("chat-messages");
+    if (chatMessages) {
+      chatMessages.innerHTML = "";
+    }
+    addInitialMessage();
+  });
+}
 
 // Auto-resize textarea as user types
 userInput.addEventListener("input", function () {
-	this.style.height = "auto";
-	this.style.height = this.scrollHeight + "px";
+  this.style.height = "auto";
+  this.style.height = this.scrollHeight + "px";
 });
 
 // Send message on Enter (without Shift)
 userInput.addEventListener("keydown", function (e) {
-	if (e.key === "Enter" && !e.shiftKey) {
-		e.preventDefault();
-		sendMessage();
-	}
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 });
 
 // Send button click handler
 sendButton.addEventListener("click", sendMessage);
 
-// Clear chat button handler (temporary session only)
-if (clearButton) {
-	clearButton.addEventListener("click", () => {
-		chatMessages.innerHTML = "";
-		addMessageToChat(
-			"assistant",
-			"こんにちは。白月日和だよ。今日も、ゆっくり話そうね。",
-		);
-		chatHistory = [
-			{ role: "assistant", content: "こんにちは。白月日和だよ。今日も、ゆっくり話そうね。" },
-		];
-	});
-}
-
-/**
- * Sends a message to the chat API and processes the response
- */
+// Send message to the API
 async function sendMessage() {
-	const message = userInput.value.trim();
+  const userInput = document.getElementById("user-input");
+  const message = userInput.value.trim();
 
-	// Don't send empty messages
-	if (message === "" || isProcessing) return;
+  if (!message || isProcessing) return;
 
-	// Disable input while processing
-	isProcessing = true;
-	userInput.disabled = true;
-	sendButton.disabled = true;
+  // Add user message to chat and history
+  addMessageToChat("user", message);
+  chatHistory.push({
+    role: "user",
+    content: message,
+  });
 
-	// Add user message to chat
-	addMessageToChat("user", message);
+  userInput.value = "";
 
-	// Clear input
-	userInput.value = "";
-	userInput.style.height = "auto";
+  // Show typing indicator
+  typingIndicator.classList.add("visible");
+  isProcessing = true;
 
-	// Show typing indicator
-	typingIndicator.classList.add("visible");
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messages: chatHistory,
+        locale: currentLocale, // Send current locale to backend
+      }),
+    });
 
-	// Add message to history (trim to recent window)
-	chatHistory.push({ role: "user", content: message });
-	if (chatHistory.length > MAX_LOCAL_HISTORY) {
-		chatHistory = chatHistory.slice(-MAX_LOCAL_HISTORY);
-	}
+    if (!response.ok) {
+      throw new Error("Network response was not ok");
+    }
 
-	try {
-		// Create new assistant response element with avatar + bubble
-		const assistantMessageEl = document.createElement("div");
-		assistantMessageEl.className = "message assistant-message";
-		const avatar = document.createElement("div");
-		avatar.className = "avatar";
-		avatar.innerHTML = '<img src="/img/Q版.png" alt="Hiyori" onerror="this.style.display=\'none\'" />';
-		const bubble = document.createElement("div");
-		bubble.className = "bubble";
-		bubble.innerHTML = "<p></p>";
-		assistantMessageEl.appendChild(avatar);
-		assistantMessageEl.appendChild(bubble);
-		chatMessages.appendChild(assistantMessageEl);
-		const assistantTextEl = bubble.querySelector("p");
+    // Handle streaming response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let assistantMessage = "";
 
-		// Scroll to bottom
-		chatMessages.scrollTop = chatMessages.scrollHeight;
+    // Clear typing indicator
+    typingIndicator.classList.remove("visible");
 
-		// Send request to API
-		const response = await fetch("/api/chat", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({
-				messages: chatHistory,
-			}),
-		});
+    // Add empty assistant message
+    const messageElement = addMessageToChat("assistant", "");
 
-		// Handle errors
-		if (!response.ok) {
-			throw new Error("Failed to get response");
-		}
-		if (!response.body) {
-			throw new Error("Response body is null");
-		}
+    // Read the stream
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-		// Process streaming response
-		const reader = response.body.getReader();
-		const decoder = new TextDecoder();
-		let responseText = "";
-		let buffer = "";
-		const flushAssistantText = () => {
-			assistantTextEl.textContent = responseText;
-			chatMessages.scrollTop = chatMessages.scrollHeight;
-		};
+      const chunk = decoder.decode(value, { stream: true });
+      assistantMessage += chunk;
 
-		let sawDone = false;
-		while (true) {
-			const { done, value } = await reader.read();
+      // Update the message in real-time
+      const contentElement = messageElement.querySelector(".bubble p");
+      if (contentElement) {
+        contentElement.textContent = assistantMessage;
+        // Auto-scroll to bottom
+        contentElement.scrollIntoView({ behavior: "smooth" });
+      }
+    }
 
-			if (done) {
-				// Process any remaining complete events in buffer
-				const parsed = consumeSseEvents(buffer + "\n\n");
-				for (const data of parsed.events) {
-					if (data === "[DONE]") {
-						break;
-					}
-					try {
-						const jsonData = JSON.parse(data);
-						// Handle both Workers AI format (response) and OpenAI format (choices[0].delta.content)
-						let content = "";
-						if (
-							typeof jsonData.response === "string" &&
-							jsonData.response.length > 0
-						) {
-							content = jsonData.response;
-						} else if (jsonData.choices?.[0]?.delta?.content) {
-							content = jsonData.choices[0].delta.content;
-						}
-						if (content) {
-							responseText += content;
-							flushAssistantText();
-						}
+    // Add to chat history
+    chatHistory.push({
+      role: "assistant",
+      content: assistantMessage,
+    });
+  } catch (error) {
+    console.error("Error:", error);
+    typingIndicator.classList.remove("visible");
+    addMessageToChat(
+      "assistant",
+      STRINGS[currentLocale]?.error || "Sorry, something went wrong."
+    );
+  } finally {
+    isProcessing = false;
+  }
 					} catch (e) {
 						console.error("Error parsing SSE data as JSON:", e, data);
 					}
