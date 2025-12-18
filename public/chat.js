@@ -9,13 +9,15 @@ const chatMessages = document.getElementById("chat-messages");
 const userInput = document.getElementById("user-input");
 const sendButton = document.getElementById("send-button");
 const typingIndicator = document.getElementById("typing-indicator");
+const clearButton = document.getElementById("clear-button");
 
 // Chat state
+const MAX_LOCAL_HISTORY = 16;
+
 let chatHistory = [
 	{
 		role: "assistant",
-		content:
-			"Hello! I'm an LLM chat app powered by Cloudflare Workers AI. How can I help you today?",
+		content: "こんにちは。白月日和だよ。今日も、ゆっくり話そうね。",
 	},
 ];
 let isProcessing = false;
@@ -36,6 +38,20 @@ userInput.addEventListener("keydown", function (e) {
 
 // Send button click handler
 sendButton.addEventListener("click", sendMessage);
+
+// Clear chat button handler (temporary session only)
+if (clearButton) {
+	clearButton.addEventListener("click", () => {
+		chatMessages.innerHTML = "";
+		addMessageToChat(
+			"assistant",
+			"こんにちは。白月日和だよ。今日も、ゆっくり話そうね。",
+		);
+		chatHistory = [
+			{ role: "assistant", content: "こんにちは。白月日和だよ。今日も、ゆっくり話そうね。" },
+		];
+	});
+}
 
 /**
  * Sends a message to the chat API and processes the response
@@ -61,16 +77,26 @@ async function sendMessage() {
 	// Show typing indicator
 	typingIndicator.classList.add("visible");
 
-	// Add message to history
+	// Add message to history (trim to recent window)
 	chatHistory.push({ role: "user", content: message });
+	if (chatHistory.length > MAX_LOCAL_HISTORY) {
+		chatHistory = chatHistory.slice(-MAX_LOCAL_HISTORY);
+	}
 
 	try {
-		// Create new assistant response element
+		// Create new assistant response element with avatar + bubble
 		const assistantMessageEl = document.createElement("div");
 		assistantMessageEl.className = "message assistant-message";
-		assistantMessageEl.innerHTML = "<p></p>";
+		const avatar = document.createElement("div");
+		avatar.className = "avatar";
+		avatar.innerHTML = '<img src="/img/Q版.png" alt="Hiyori" onerror="this.style.display=\'none\'" />';
+		const bubble = document.createElement("div");
+		bubble.className = "bubble";
+		bubble.innerHTML = "<p></p>";
+		assistantMessageEl.appendChild(avatar);
+		assistantMessageEl.appendChild(bubble);
 		chatMessages.appendChild(assistantMessageEl);
-		const assistantTextEl = assistantMessageEl.querySelector("p");
+		const assistantTextEl = bubble.querySelector("p");
 
 		// Scroll to bottom
 		chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -173,9 +199,12 @@ async function sendMessage() {
 			}
 		}
 
-		// Add completed response to chat history
+		// Add completed response to chat history (trim window)
 		if (responseText.length > 0) {
 			chatHistory.push({ role: "assistant", content: responseText });
+			if (chatHistory.length > MAX_LOCAL_HISTORY) {
+				chatHistory = chatHistory.slice(-MAX_LOCAL_HISTORY);
+			}
 		}
 	} catch (error) {
 		console.error("Error:", error);
@@ -201,10 +230,24 @@ async function sendMessage() {
 function addMessageToChat(role, content) {
 	const messageEl = document.createElement("div");
 	messageEl.className = `message ${role}-message`;
-	messageEl.innerHTML = `<p>${content}</p>`;
-	chatMessages.appendChild(messageEl);
 
-	// Scroll to bottom
+	if (role === "assistant") {
+		const avatar = document.createElement("div");
+		avatar.className = "avatar";
+		avatar.innerHTML = '<img src="/img/Q版.png" alt="Hiyori" onerror="this.style.display=\'none\'" />';
+		const bubble = document.createElement("div");
+		bubble.className = "bubble";
+		bubble.innerHTML = `<p>${content}</p>`;
+		messageEl.appendChild(avatar);
+		messageEl.appendChild(bubble);
+	} else {
+		const bubble = document.createElement("div");
+		bubble.className = "bubble";
+		bubble.innerHTML = `<p>${content}</p>`;
+		messageEl.appendChild(bubble);
+	}
+
+	chatMessages.appendChild(messageEl);
 	chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
